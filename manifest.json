@@ -2,7 +2,7 @@
   "name": "Quest Mode",
   "short_name": "Quest Mode",
   "description": "Gamified routine tracker for Ann and Cat",
-  "start_url": "/",
+  "start_url": "/QuestMode-KidsApp",
   "display": "standalone",
   "background_color": "#667eea",
   "theme_color": "#667eea",
