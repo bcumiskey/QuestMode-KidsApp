@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Quest Mode Icons</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 40px; text-align: center; background: #f5f5f5; }
+    .icon { margin: 20px; display: inline-block; }
+    canvas { border-radius: 20%; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    h1 { color: #333; }
+    p { color: #666; max-width: 500px; margin: 20px auto; }
+    button { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 10px; }
+    button:hover { transform: scale(1.05); }
+  </style>
+</head>
+<body>
+  <h1>🎮 Quest Mode Icons</h1>
+  <p>Right-click each icon and "Save Image As" to download. Save as <strong>icon-192.png</strong> and <strong>icon-512.png</strong></p>
+  
+  <div class="icon">
+    <canvas id="icon192" width="192" height="192"></canvas>
+    <p>192x192</p>
+  </div>
+  
+  <div class="icon">
+    <canvas id="icon512" width="512" height="512"></canvas>
+    <p>512x512</p>
+  </div>
+
+  <script>
+    function drawIcon(canvasId, size) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+      
+      // Background gradient
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+      
+      // Rounded rectangle
+      const radius = size * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(size - radius, 0);
+      ctx.quadraticCurveTo(size, 0, size, radius);
+      ctx.lineTo(size, size - radius);
+      ctx.quadraticCurveTo(size, size, size - radius, size);
+      ctx.lineTo(radius, size);
+      ctx.quadraticCurveTo(0, size, 0, size - radius);
+      ctx.lineTo(0, radius);
+      ctx.quadraticCurveTo(0, 0, radius, 0);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Emoji
+      ctx.font = `${size * 0.5}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🎮', size / 2, size / 2 + size * 0.05);
+    }
+    
+    drawIcon('icon192', 192);
+    drawIcon('icon512', 512);
+  </script>
+</body>
+</html>

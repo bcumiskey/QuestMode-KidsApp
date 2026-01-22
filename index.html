@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#667eea">
+  <title>Quest Mode</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
+    .gradient-default { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .gradient-ocean { background: linear-gradient(135deg, #00c6fb 0%, #005bea 100%); }
+    .gradient-sunset { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+    .gradient-forest { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+    .gradient-galaxy { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); }
+    .gradient-rainbow { background: linear-gradient(135deg, #f5af19 0%, #f12711 25%, #8E2DE2 50%, #4A00E0 75%, #00c6fb 100%); }
+    .animate-bounce-in { animation: bounce-in 0.3s ease-out; }
+    @keyframes bounce-in { 0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    input[type="time"] { color-scheme: dark; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  
+  <script>
+    // ============== CONFIGURATION ==============
+    // REPLACE THIS with your Firebase config from Firebase Console
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    
+    // ============== APP STATE ==============
+    let db = null;
+    let currentUser = null;
+    let userData = { ann: null, cat: null };
+    let settings = null;
+    let adminMode = false;
+    let activeTab = 'quests';
+    let adminTab = 'overview';
+    let showPopup = null;
+    let syncStatus = 'connecting';
+    let pinInput = '';
+    let showKidLogin = null;
+    let showAdminLogin = false;
+
+    const defaultSettings = {
+      adminPin: '1234',
+      kidPins: { ann: '1111', cat: '2222' },
+      requireApproval: false,
+      morningDeadline: '07:30',
+      eveningDeadline: '20:30',
+      rewards: [
+        { points: 500, name: '$1 Greenlight bonus', icon: '💵', active: true },
+        { points: 1000, name: '30 min extra screen time', icon: '📱', active: true },
+        { points: 1500, name: '$2 Greenlight bonus', icon: '💰', active: true },
+        { points: 2000, name: 'Pick dinner one night', icon: '🍕', active: true },
+        { points: 3000, name: '$5 Greenlight bonus', icon: '💸', active: true },
+        { points: 5000, name: 'Special outing with parent', icon: '🎉', active: true },
+        { points: 7500, name: '$10 Greenlight bonus', icon: '🤑', active: true },
+        { points: 10000, name: 'MEGA reward - your choice!', icon: '🏆', active: true },
+      ]
+    };
+
+    const defaultUserData = (id, name) => ({
+      id, name, xp: 0, totalPoints: 0, redeemedPoints: 0, streak: 0, longestStreak: 0,
+      lastCompletedDate: null, completedToday: {}, pendingApproval: {}, history: [],
+      theme: 'default', avatar: id === 'ann' ? 'star' : 'heart'
+    });
+
+    const taskDefinitions = {
+      ann: {
+        morning: [
+          { id: 'brush_am', name: 'Brush teeth', points: 10, icon: '🦷', deadline: 'morning' },
+          { id: 'shower_am', name: 'Shower/wash face', points: 15, icon: '🚿', deadline: 'morning' },
+          { id: 'bed_made', name: 'Make bed', points: 10, icon: '🛏️', deadline: 'morning' },
+          { id: 'dressed', name: 'Get dressed (no reminders!)', points: 10, icon: '👕', deadline: 'morning' },
+          { id: 'breakfast', name: 'Eat breakfast', points: 5, icon: '🥣', deadline: 'morning' },
+          { id: 'ready_ontime', name: 'Ready on time', points: 20, icon: '⏰', deadline: 'morning' },
+        ],
+        evening: [
+          { id: 'homework', name: 'Homework complete', points: 25, icon: '📚', deadline: 'evening' },
+          { id: 'brush_pm', name: 'Brush teeth', points: 10, icon: '🦷', deadline: 'evening' },
+          { id: 'shower_pm', name: 'Shower (if not AM)', points: 15, icon: '🛁', deadline: 'evening' },
+          { id: 'clothes_out', name: 'Clothes out for tomorrow', points: 10, icon: '👗', deadline: 'evening' },
+          { id: 'backpack', name: 'Backpack packed', points: 10, icon: '🎒', deadline: 'evening' },
+          { id: 'bed_ontime', name: 'In bed on time', points: 15, icon: '🌙', deadline: 'evening' },
+        ],
+        school: [
+          { id: 'reading', name: '20 min reading', points: 20, icon: '📖', deadline: 'evening' },
+          { id: 'practice', name: 'French horn practice', points: 25, icon: '🎺', deadline: 'evening' },
+          { id: 'good_report', name: 'Good day report', points: 30, icon: '⭐', deadline: 'evening' },
+        ],
+        chores: [
+          { id: 'room_clean', name: 'Room clean & organized', points: 20, icon: '✨', deadline: 'evening' },
+          { id: 'dishes', name: 'Help with dishes', points: 15, icon: '🍽️', deadline: 'evening' },
+          { id: 'laundry', name: 'Put away laundry', points: 15, icon: '🧺', deadline: 'evening' },
+          { id: 'pet_care', name: 'Pet care duties', points: 15, icon: '🐾', deadline: 'evening' },
+          { id: 'help_sister', name: 'Help Cat with something', points: 20, icon: '💕', deadline: 'evening' },
+        ],
+        bonus: [
+          { id: 'extra_chore', name: 'Extra chore (unasked!)', points: 35, icon: '🌟', deadline: null },
+          { id: 'kind_act', name: 'Random act of kindness', points: 25, icon: '💝', deadline: null },
+          { id: 'no_screens', name: 'Screen-free bonus hour', points: 20, icon: '📵', deadline: null },
+          { id: 'exercise', name: '30 min physical activity', points: 20, icon: '🏃‍♀️', deadline: null },
+        ]
+      },
+      cat: {
+        morning: [
+          { id: 'brush_am', name: 'Brush teeth', points: 10, icon: '🦷', deadline: 'morning' },
+          { id: 'wash_face', name: 'Wash face', points: 10, icon: '💧', deadline: 'morning' },
+          { id: 'bed_made', name: 'Make bed', points: 10, icon: '🛏️', deadline: 'morning' },
+          { id: 'dressed', name: 'Get dressed (no reminders!)', points: 10, icon: '👕', deadline: 'morning' },
+          { id: 'breakfast', name: 'Eat breakfast', points: 5, icon: '🥣', deadline: 'morning' },
+          { id: 'ready_ontime', name: 'Ready on time', points: 20, icon: '⏰', deadline: 'morning' },
+        ],
+        evening: [
+          { id: 'homework', name: 'Homework complete', points: 25, icon: '📚', deadline: 'evening' },
+          { id: 'brush_pm', name: 'Brush teeth', points: 10, icon: '🦷', deadline: 'evening' },
+          { id: 'bath', name: 'Bath or shower', points: 15, icon: '🛁', deadline: 'evening' },
+          { id: 'clothes_out', name: 'Clothes out for tomorrow', points: 10, icon: '👗', deadline: 'evening' },
+          { id: 'backpack', name: 'Backpack packed', points: 10, icon: '🎒', deadline: 'evening' },
+          { id: 'bed_ontime', name: 'In bed on time', points: 15, icon: '🌙', deadline: 'evening' },
+        ],
+        school: [
+          { id: 'reading', name: '15 min reading', points: 20, icon: '📖', deadline: 'evening' },
+          { id: 'practice', name: 'Practice/learning activity', points: 20, icon: '🎨', deadline: 'evening' },
+          { id: 'good_report', name: 'Good day report', points: 30, icon: '⭐', deadline: 'evening' },
+        ],
+        chores: [
+          { id: 'room_clean', name: 'Room clean & organized', points: 20, icon: '✨', deadline: 'evening' },
+          { id: 'dishes', name: 'Help clear table', points: 10, icon: '🍽️', deadline: 'evening' },
+          { id: 'toys_away', name: 'Put toys/stuff away', points: 10, icon: '🧸', deadline: 'evening' },
+          { id: 'pet_care', name: 'Help with pet care', points: 15, icon: '🐾', deadline: 'evening' },
+          { id: 'help_family', name: 'Help someone in family', points: 15, icon: '💕', deadline: 'evening' },
+        ],
+        bonus: [
+          { id: 'extra_chore', name: 'Extra chore (unasked!)', points: 30, icon: '🌟', deadline: null },
+          { id: 'kind_act', name: 'Random act of kindness', points: 25, icon: '💝', deadline: null },
+          { id: 'no_screens', name: 'Screen-free bonus hour', points: 15, icon: '📵', deadline: null },
+          { id: 'exercise', name: '30 min physical activity', points: 15, icon: '🏃‍♀️', deadline: null },
+        ]
+      }
+    };
+
+    const categoryNames = {
+      morning: { name: 'Morning Launch', icon: '🌅', color: '#FF9500' },
+      evening: { name: 'Evening Wind-Down', icon: '🌙', color: '#5856D6' },
+      school: { name: 'School Quest', icon: '📚', color: '#34C759' },
+      chores: { name: 'Home Crew', icon: '🏠', color: '#007AFF' },
+      bonus: { name: 'Bonus Missions', icon: '⭐', color: '#FF2D55' }
+    };
+
+    const petStages = [
+      { name: 'Egg', emoji: '🥚', minStreak: 0 },
+      { name: 'Baby Dragon', emoji: '🐣', minStreak: 3 },
+      { name: 'Young Dragon', emoji: '🦎', minStreak: 7 },
+      { name: 'Teen Dragon', emoji: '🐉', minStreak: 14 },
+      { name: 'Mighty Dragon', emoji: '🔥', minStreak: 30 },
+      { name: 'LEGENDARY', emoji: '👑', minStreak: 60 },
+    ];
+
+    const themes = [
+      { id: 'default', name: 'Classic', unlockLevel: 1 },
+      { id: 'ocean', name: 'Ocean', unlockLevel: 3 },
+      { id: 'sunset', name: 'Sunset', unlockLevel: 5 },
+      { id: 'forest', name: 'Forest', unlockLevel: 8 },
+      { id: 'galaxy', name: 'Galaxy', unlockLevel: 10 },
+      { id: 'rainbow', name: 'Rainbow', unlockLevel: 15 },
+    ];
+
+    const avatars = [
+      { id: 'star', emoji: '⭐', unlockLevel: 1 },
+      { id: 'heart', emoji: '💖', unlockLevel: 1 },
+      { id: 'unicorn', emoji: '🦄', unlockLevel: 2 },
+      { id: 'butterfly', emoji: '🦋', unlockLevel: 4 },
+      { id: 'crown', emoji: '👑', unlockLevel: 6 },
+      { id: 'rainbow', emoji: '🌈', unlockLevel: 8 },
+      { id: 'dragon', emoji: '🐉', unlockLevel: 10 },
+      { id: 'phoenix', emoji: '🔥', unlockLevel: 12 },
+      { id: 'diamond', emoji: '💎', unlockLevel: 15 },
+    ];
+
+    // ============== UTILITIES ==============
+    const calculateLevel = (xp) => Math.floor(Math.sqrt(xp / 100)) + 1;
+    const xpForLevel = (level) => Math.pow(level - 1, 2) * 100;
+    const xpForNextLevel = (level) => Math.pow(level, 2) * 100;
+    const getTodayString = () => new Date().toISOString().split('T')[0];
+    const getPetStage = (streak) => { let stage = petStages[0]; for (const s of petStages) { if (streak >= s.minStreak) stage = s; } return stage; };
+    const getAvatar = (id) => avatars.find(a => a.id === id) || avatars[0];
+
+    const isOverdue = (deadline) => {
+      if (!deadline || !settings) return false;
+      const now = new Date();
+      const currentTime = now.getHours() * 60 + now.getMinutes();
+      const dl = deadline === 'morning' ? settings.morningDeadline : settings.eveningDeadline;
+      const [h, m] = (dl || '07:30').split(':').map(Number);
+      return currentTime > h * 60 + m;
+    };
+
+    // ============== FIREBASE ==============
+    function initFirebase() {
+      if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+        syncStatus = 'setup';
+        render();
+        return;
+      }
+      
+      try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        
+        // Listen for user data changes
+        db.ref('users').on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            userData.ann = data.ann || defaultUserData('ann', 'Ann');
+            userData.cat = data.cat || defaultUserData('cat', 'Cat');
+          } else {
+            userData.ann = defaultUserData('ann', 'Ann');
+            userData.cat = defaultUserData('cat', 'Cat');
+            db.ref('users').set(userData);
+          }
+          syncStatus = 'synced';
+          render();
+        });
+
+        // Listen for settings changes
+        db.ref('settings').on('value', (snapshot) => {
+          settings = snapshot.val() || defaultSettings;
+          render();
+        });
+
+        syncStatus = 'synced';
+      } catch (e) {
+        console.error('Firebase init error:', e);
+        syncStatus = 'error';
+        render();
+      }
+    }
+
+    async function saveUserData(userId, data) {
+      if (!db) return;
+      syncStatus = 'syncing';
+      render();
+      await db.ref(`users/${userId}`).set(data);
+      syncStatus = 'synced';
+      render();
+    }
+
+    async function saveSettings(newSettings) {
+      if (!db) return;
+      settings = newSettings;
+      await db.ref('settings').set(newSettings);
+    }
+
+    // ============== ACTIONS ==============
+    async function toggleTask(category, taskId) {
+      if (!currentUser || !userData[currentUser]) return;
+      
+      const today = getTodayString();
+      const user = { ...userData[currentUser] };
+      const task = taskDefinitions[currentUser][category].find(t => t.id === taskId);
+      const todayKey = `${today}_${category}_${taskId}`;
+      const wasCompleted = user.completedToday?.[todayKey];
+      const wasPending = user.pendingApproval?.[todayKey];
+
+      if (settings?.requireApproval && !wasCompleted && !wasPending) {
+        user.pendingApproval = user.pendingApproval || {};
+        user.pendingApproval[todayKey] = { task, category, timestamp: new Date().toISOString() };
+        await saveUserData(currentUser, user);
+        showPopup = { type: 'pending', task };
+        render();
+        return;
+      }
+
+      user.completedToday = user.completedToday || {};
+      
+      if (wasCompleted) {
+        user.xp = Math.max(0, (user.xp || 0) - task.points);
+        user.totalPoints = Math.max(0, (user.totalPoints || 0) - task.points);
+        delete user.completedToday[todayKey];
+      } else {
+        user.xp = (user.xp || 0) + task.points;
+        user.totalPoints = (user.totalPoints || 0) + task.points;
+        user.completedToday[todayKey] = true;
+
+        // Streak logic
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        if (user.lastCompletedDate !== today) {
+          if (user.lastCompletedDate === yesterdayStr || !user.lastCompletedDate) {
+            user.streak = (user.streak || 0) + 1;
+            if (user.streak > (user.longestStreak || 0)) user.longestStreak = user.streak;
+          } else {
+            user.streak = 1;
+          }
+          user.lastCompletedDate = today;
+        }
+
+        const oldLevel = calculateLevel(user.xp - task.points);
+        const newLevel = calculateLevel(user.xp);
+        if (newLevel > oldLevel) {
+          showPopup = { type: 'levelup', level: newLevel };
+        }
+      }
+
+      if (user.pendingApproval) delete user.pendingApproval[todayKey];
+      await saveUserData(currentUser, user);
+      render();
+    }
+
+    async function approveTask(userId, todayKey) {
+      const user = { ...userData[userId] };
+      const pending = user.pendingApproval?.[todayKey];
+      if (!pending) return;
+
+      user.xp = (user.xp || 0) + pending.task.points;
+      user.totalPoints = (user.totalPoints || 0) + pending.task.points;
+      user.completedToday = user.completedToday || {};
+      user.completedToday[todayKey] = true;
+      delete user.pendingApproval[todayKey];
+      
+      await saveUserData(userId, user);
+    }
+
+    async function rejectTask(userId, todayKey) {
+      const user = { ...userData[userId] };
+      if (user.pendingApproval) delete user.pendingApproval[todayKey];
+      await saveUserData(userId, user);
+    }
+
+    async function redeemReward(reward) {
+      if (!currentUser) return;
+      const user = { ...userData[currentUser] };
+      const available = (user.totalPoints || 0) - (user.redeemedPoints || 0);
+      
+      if (available >= reward.points) {
+        user.redeemedPoints = (user.redeemedPoints || 0) + reward.points;
+        user.history = user.history || [];
+        user.history.push({ type: 'redemption', reward: reward.name, points: reward.points, date: new Date().toISOString() });
+        await saveUserData(currentUser, user);
+        showPopup = { type: 'redeemed', reward };
+        render();
+      }
+    }
+
+    async function changeTheme(themeId) {
+      if (!currentUser) return;
+      const user = { ...userData[currentUser] };
+      user.theme = themeId;
+      await saveUserData(currentUser, user);
+    }
+
+    async function changeAvatar(avatarId) {
+      if (!currentUser) return;
+      const user = { ...userData[currentUser] };
+      user.avatar = avatarId;
+      await saveUserData(currentUser, user);
+    }
+
+    async function awardBonusPoints(userId, points, reason) {
+      const user = { ...userData[userId] };
+      user.xp = (user.xp || 0) + points;
+      user.totalPoints = (user.totalPoints || 0) + points;
+      user.history = user.history || [];
+      user.history.push({ type: 'bonus', points, reason, date: new Date().toISOString() });
+      await saveUserData(userId, user);
+    }
+
+    async function resetStreak(userId) {
+      const user = { ...userData[userId] };
+      user.streak = 0;
+      await saveUserData(userId, user);
+    }
+
+    // ============== RENDER ==============
+    function render() {
+      const app = document.getElementById('app');
+      
+      // Setup screen
+      if (syncStatus === 'setup') {
+        app.innerHTML = renderSetupScreen();
+        return;
+      }
+
+      // Loading
+      if (syncStatus === 'connecting' || !settings) {
+        app.innerHTML = `
+          <div class="min-h-screen gradient-default flex items-center justify-center">
+            <div class="text-center">
+              <div class="text-6xl mb-4 animate-bounce">🎮</div>
+              <div class="text-white text-2xl">Loading Quest Mode...</div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Admin login
+      if (showAdminLogin) {
+        app.innerHTML = renderPinScreen('admin');
+        return;
+      }
+
+      // Kid login
+      if (showKidLogin) {
+        app.innerHTML = renderPinScreen(showKidLogin);
+        return;
+      }
+
+      // Admin dashboard
+      if (adminMode) {
+        app.innerHTML = renderAdminDashboard();
+        return;
+      }
+
+      // User selection
+      if (!currentUser) {
+        app.innerHTML = renderUserSelection();
+        return;
+      }
+
+      // Main app
+      app.innerHTML = renderMainApp();
+    }
+
+    function renderSetupScreen() {
+      return `
+        <div class="min-h-screen gradient-default flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl">
+            <h1 class="text-3xl font-bold text-center mb-2 text-purple-600">🎮 Quest Mode Setup</h1>
+            <p class="text-gray-500 text-center mb-6">One-time Firebase configuration needed</p>
+            
+            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
+              <h3 class="font-bold text-yellow-800 mb-2">⚠️ Firebase Not Configured</h3>
+              <p class="text-yellow-700 text-sm">Edit <code class="bg-yellow-100 px-1 rounded">index.html</code> and replace the firebaseConfig with your Firebase project credentials.</p>
+            </div>
+            
+            <div class="space-y-4 text-sm text-gray-600">
+              <div class="flex gap-3">
+                <span class="bg-purple-100 text-purple-600 w-6 h-6 rounded-full flex items-center justify-center font-bold flex-shrink-0">1</span>
+                <p>Go to <a href="https://console.firebase.google.com" target="_blank" class="text-purple-600 underline">Firebase Console</a> and create a new project</p>
+              </div>
+              <div class="flex gap-3">
+                <span class="bg-purple-100 text-purple-600 w-6 h-6 rounded-full flex items-center justify-center font-bold flex-shrink-0">2</span>
+                <p>Enable Realtime Database (start in test mode)</p>
+              </div>
+              <div class="flex gap-3">
+                <span class="bg-purple-100 text-purple-600 w-6 h-6 rounded-full flex items-center justify-center font-bold flex-shrink-0">3</span>
+                <p>Go to Project Settings → Add Web App → Copy the config</p>
+              </div>
+              <div class="flex gap-3">
+                <span class="bg-purple-100 text-purple-600 w-6 h-6 rounded-full flex items-center justify-center font-bold flex-shrink-0">4</span>
+                <p>Paste the config values into index.html</p>
+              </div>
+              <div class="flex gap-3">
+                <span class="bg-purple-100 text-purple-600 w-6 h-6 rounded-full flex items-center justify-center font-bold flex-shrink-0">5</span>
+                <p>Refresh this page</p>
+              </div>
+            </div>
+
+            <button onclick="location.reload()" class="w-full mt-6 bg-purple-600 text-white py-3 rounded-xl font-medium hover:bg-purple-700">
+              I've updated the config - Refresh
+            </button>
+          </div>
+        </div>`;
+    }
+
+    function renderPinScreen(type) {
+      const isAdmin = type === 'admin';
+      const kidName = type === 'ann' ? 'Ann' : type === 'cat' ? 'Cat' : '';
+      const kidAvatar = !isAdmin && userData[type] ? getAvatar(userData[type].avatar).emoji : '';
+      
+      return `
+        <div class="min-h-screen ${isAdmin ? 'bg-gradient-to-br from-gray-800 to-gray-900' : 'gradient-default'} flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl">
+            <div class="text-center mb-6">
+              ${isAdmin ? '<div class="text-5xl mb-2">🔐</div><h2 class="text-2xl font-bold text-gray-800">Parent Access</h2>' : 
+                `<div class="text-6xl mb-2">${kidAvatar}</div><h2 class="text-2xl font-bold text-gray-800">Hi ${kidName}!</h2><p class="text-gray-500">Enter your secret PIN</p>`}
+            </div>
+            
+            <div class="flex justify-center gap-3 mb-6">
+              ${[0,1,2,3].map(i => `<div class="w-4 h-4 rounded-full ${pinInput.length > i ? 'bg-purple-500' : 'bg-gray-200'}"></div>`).join('')}
+            </div>
+            
+            <div class="grid grid-cols-3 gap-2 mb-4">
+              ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(n => `
+                <button onclick="handlePinInput('${n}', '${type}')" class="p-4 text-2xl rounded-xl ${n === '' ? '' : 'bg-purple-100 hover:bg-purple-200 active:bg-purple-300'}">${n}</button>
+              `).join('')}
+            </div>
+            
+            <button onclick="cancelPin()" class="w-full py-3 rounded-xl bg-gray-200 text-gray-700 font-medium">Back</button>
+            ${isAdmin ? '<p class="text-gray-400 text-sm text-center mt-4">Default PIN: 1234</p>' : ''}
+          </div>
+        </div>`;
+    }
+
+    function handlePinInput(key, type) {
+      if (key === '⌫') {
+        pinInput = pinInput.slice(0, -1);
+      } else if (key !== '' && pinInput.length < 4) {
+        pinInput += key;
+        if (pinInput.length === 4) {
+          setTimeout(() => checkPin(type), 200);
+        }
+      }
+      render();
+    }
+
+    function checkPin(type) {
+      const correctPin = type === 'admin' 
+        ? settings.adminPin 
+        : settings.kidPins?.[type] || (type === 'ann' ? '1111' : '2222');
+      
+      if (pinInput === correctPin) {
+        if (type === 'admin') {
+          adminMode = true;
+          showAdminLogin = false;
+        } else {
+          currentUser = type;
+          showKidLogin = null;
+        }
+        pinInput = '';
+      } else {
+        alert('Incorrect PIN - try again!');
+        pinInput = '';
+      }
+      render();
+    }
+
+    function cancelPin() {
+      pinInput = '';
+      showAdminLogin = false;
+      showKidLogin = null;
+      render();
+    }
+
+    function renderUserSelection() {
+      const leaderboard = ['ann', 'cat']
+        .map(id => userData[id] || defaultUserData(id, id === 'ann' ? 'Ann' : 'Cat'))
+        .sort((a, b) => (b.xp || 0) - (a.xp || 0));
+
+      return `
+        <div class="min-h-screen gradient-default flex items-center justify-center p-4">
+          <div class="bg-white/95 backdrop-blur rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <h1 class="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">Quest Mode</h1>
+            <p class="text-gray-500 text-center mb-2">Choose your hero!</p>
+            <div class="flex justify-center mb-6">
+              <span class="text-xs ${syncStatus === 'synced' ? 'text-green-600' : 'text-yellow-600'} flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500' : 'bg-yellow-500'}"></span>
+                ${syncStatus === 'synced' ? 'Connected' : 'Syncing...'}
+              </span>
+            </div>
+            
+            <div class="space-y-4">
+              ${['ann', 'cat'].map(userId => {
+                const user = userData[userId] || defaultUserData(userId, userId === 'ann' ? 'Ann' : 'Cat');
+                const level = calculateLevel(user.xp || 0);
+                const avatar = getAvatar(user.avatar);
+                const pet = getPetStage(user.streak || 0);
+                return `
+                  <button onclick="showKidLogin='${userId}'; render();" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-2xl p-6 flex items-center gap-4 transition-all hover:scale-105 shadow-lg">
+                    <div class="text-5xl">${avatar.emoji}</div>
+                    <div class="flex-1 text-left">
+                      <div class="text-2xl font-bold">${user.name}</div>
+                      <div class="text-purple-200">Level ${level} • ${pet.emoji} ${pet.name}</div>
+                      <div class="text-sm text-purple-200">${user.streak || 0} day streak 🔥</div>
+                    </div>
+                    <div class="text-2xl">🔐</div>
+                  </button>`;
+              }).join('')}
+            </div>
+
+            <div class="mt-8 p-4 bg-gray-100 rounded-xl">
+              <h3 class="font-bold text-gray-700 mb-2">🏆 Family Leaderboard</h3>
+              <div class="space-y-2">
+                ${leaderboard.map((user, i) => `
+                  <div class="flex items-center gap-2 text-gray-600">
+                    <span class="text-xl">${i === 0 ? '🥇' : '🥈'}</span>
+                    <span class="font-medium">${user.name}</span>
+                    <span class="flex-1 text-right">${(user.xp || 0).toLocaleString()} XP</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <button onclick="showAdminLogin=true; render();" class="w-full mt-4 py-3 text-gray-400 hover:text-gray-600 text-sm">🔐 Parent Access</button>
+          </div>
+        </div>`;
+    }
+
+    function renderAdminDashboard() {
+      const today = getTodayString();
+      const pendingApprovals = [];
+      ['ann', 'cat'].forEach(userId => {
+        const user = userData[userId];
+        if (user?.pendingApproval) {
+          Object.entries(user.pendingApproval).forEach(([key, value]) => {
+            pendingApprovals.push({ userId, key, ...value, userName: user.name });
+          });
+        }
+      });
+
+      return `
+        <div class="min-h-screen bg-gradient-to-br from-gray-800 to-gray-900 text-white">
+          <div class="bg-black/30 p-4 sticky top-0 z-10">
+            <div class="max-w-2xl mx-auto">
+              <div class="flex items-center justify-between mb-2">
+                <h1 class="text-xl font-bold">👨‍👩‍👧‍👦 Parent Dashboard</h1>
+                <button onclick="adminMode=false; render();" class="bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30">Exit</button>
+              </div>
+              <span class="text-xs text-green-400 flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-green-400"></span> Connected
+              </span>
+            </div>
+          </div>
+
+          <div class="max-w-2xl mx-auto px-4 pt-4">
+            <div class="flex bg-black/20 rounded-xl p-1 gap-1">
+              ${['overview', 'approvals', 'settings'].map(tab => `
+                <button onclick="adminTab='${tab}'; render();" class="flex-1 py-2 rounded-lg font-medium text-sm ${adminTab === tab ? 'bg-white text-gray-800' : 'text-white/70 hover:text-white'}">
+                  ${tab === 'overview' ? 'Overview' : tab === 'approvals' ? `Approvals ${pendingApprovals.length > 0 ? '(' + pendingApprovals.length + ')' : ''}` : 'Settings'}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="max-w-2xl mx-auto p-4 space-y-4">
+            ${adminTab === 'overview' ? renderAdminOverview(today) : ''}
+            ${adminTab === 'approvals' ? renderAdminApprovals(pendingApprovals) : ''}
+            ${adminTab === 'settings' ? renderAdminSettings() : ''}
+          </div>
+        </div>`;
+    }
+
+    function renderAdminOverview(today) {
+      return ['ann', 'cat'].map(userId => {
+        const user = userData[userId];
+        if (!user) return '';
+        const level = calculateLevel(user.xp || 0);
+        const pet = getPetStage(user.streak || 0);
+        const tasks = taskDefinitions[userId];
+        let completedToday = 0, totalToday = 0, overdueCount = 0;
+        Object.keys(tasks).forEach(cat => {
+          tasks[cat].forEach(task => {
+            totalToday++;
+            if (user.completedToday?.[`${today}_${cat}_${task.id}`]) completedToday++;
+            else if (isOverdue(task.deadline)) overdueCount++;
+          });
+        });
+        const pendingCount = Object.keys(user.pendingApproval || {}).length;
+
+        return `
+          <div class="bg-white/10 rounded-2xl p-6">
+            <div class="flex items-center gap-4 mb-4">
+              <div class="text-4xl">${getAvatar(user.avatar).emoji}</div>
+              <div class="flex-1">
+                <h3 class="text-xl font-bold">${user.name}</h3>
+                <div class="text-white/70">Level ${level} • ${user.streak || 0} day streak ${pet.emoji}</div>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-bold">${completedToday}/${totalToday}</div>
+                <div class="text-white/70 text-sm">today</div>
+              </div>
+            </div>
+            <div class="h-3 bg-black/30 rounded-full overflow-hidden mb-3">
+              <div class="h-full bg-gradient-to-r from-green-400 to-emerald-500" style="width: ${(completedToday / totalToday) * 100}%"></div>
+            </div>
+            <div class="flex gap-2 flex-wrap mb-4">
+              ${overdueCount > 0 ? `<div class="bg-red-500/20 text-red-300 px-3 py-1 rounded-lg text-sm">⚠️ ${overdueCount} overdue</div>` : ''}
+              ${pendingCount > 0 ? `<div class="bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-lg text-sm">⏳ ${pendingCount} pending</div>` : ''}
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div class="bg-black/20 rounded-xl p-3 text-center">
+                <div class="text-lg font-bold">${(user.totalPoints || 0).toLocaleString()}</div>
+                <div class="text-white/60 text-xs">Total Points</div>
+              </div>
+              <div class="bg-black/20 rounded-xl p-3 text-center">
+                <div class="text-lg font-bold">${((user.totalPoints || 0) - (user.redeemedPoints || 0)).toLocaleString()}</div>
+                <div class="text-white/60 text-xs">Available</div>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="promptBonusPoints('${userId}')" class="flex-1 bg-green-500/30 text-green-300 py-2 rounded-lg text-sm hover:bg-green-500/40">+ Award Points</button>
+              <button onclick="confirmResetStreak('${userId}')" class="flex-1 bg-red-500/30 text-red-300 py-2 rounded-lg text-sm hover:bg-red-500/40">Reset Streak</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderAdminApprovals(pendingApprovals) {
+      if (pendingApprovals.length === 0) {
+        return `<div class="bg-white/10 rounded-2xl p-6"><div class="text-white/60 text-center py-8">No tasks waiting for approval ✓</div></div>`;
+      }
+      return `
+        <div class="bg-white/10 rounded-2xl p-6">
+          <h3 class="text-lg font-bold mb-4">Pending Approvals</h3>
+          <div class="space-y-3">
+            ${pendingApprovals.map(item => `
+              <div class="bg-black/20 rounded-xl p-4 flex items-center gap-3">
+                <div class="text-2xl">${item.task.icon}</div>
+                <div class="flex-1">
+                  <div class="font-medium">${item.task.name}</div>
+                  <div class="text-white/60 text-sm">${item.userName} • +${item.task.points} pts</div>
+                </div>
+                <button onclick="rejectTask('${item.userId}', '${item.key}')" class="bg-red-500/30 text-red-300 p-2 rounded-lg hover:bg-red-500/40">✕</button>
+                <button onclick="approveTask('${item.userId}', '${item.key}')" class="bg-green-500/30 text-green-300 p-2 rounded-lg hover:bg-green-500/40">✓</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    }
+
+    function renderAdminSettings() {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white/10 rounded-2xl p-6">
+            <h3 class="text-lg font-bold mb-4">⏰ Deadlines</h3>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-white/80">Morning tasks due by</span>
+                <input type="time" value="${settings.morningDeadline || '07:30'}" onchange="updateSetting('morningDeadline', this.value)" class="bg-black/30 rounded-lg px-3 py-2 text-white">
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-white/80">Evening tasks due by</span>
+                <input type="time" value="${settings.eveningDeadline || '20:30'}" onchange="updateSetting('eveningDeadline', this.value)" class="bg-black/30 rounded-lg px-3 py-2 text-white">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white/10 rounded-2xl p-6">
+            <h3 class="text-lg font-bold mb-4">✅ Approval Mode</h3>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium">Require Parent Approval</div>
+                <div class="text-white/60 text-sm">Kids' completions need verification</div>
+              </div>
+              <button onclick="toggleApprovalMode()" class="w-14 h-8 rounded-full transition-all flex items-center ${settings.requireApproval ? 'bg-green-500' : 'bg-gray-600'}">
+                <div class="w-6 h-6 bg-white rounded-full transition-all ${settings.requireApproval ? 'translate-x-7' : 'translate-x-1'}"></div>
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white/10 rounded-2xl p-6">
+            <h3 class="text-lg font-bold mb-4">🔐 PINs</h3>
+            <div class="space-y-3">
+              <button onclick="changePin('admin')" class="w-full bg-white/20 py-3 rounded-xl hover:bg-white/30 text-left px-4">
+                <div class="font-medium">Admin PIN</div>
+                <div class="text-white/60 text-sm">Current: ${settings.adminPin}</div>
+              </button>
+              <button onclick="changePin('ann')" class="w-full bg-white/20 py-3 rounded-xl hover:bg-white/30 text-left px-4">
+                <div class="font-medium">Ann's PIN</div>
+                <div class="text-white/60 text-sm">Current: ${settings.kidPins?.ann || '1111'}</div>
+              </button>
+              <button onclick="changePin('cat')" class="w-full bg-white/20 py-3 rounded-xl hover:bg-white/30 text-left px-4">
+                <div class="font-medium">Cat's PIN</div>
+                <div class="text-white/60 text-sm">Current: ${settings.kidPins?.cat || '2222'}</div>
+              </button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderMainApp() {
+      const user = userData[currentUser];
+      if (!user) return '';
+
+      const level = calculateLevel(user.xp || 0);
+      const currentLevelXp = xpForLevel(level);
+      const nextLevelXp = xpForNextLevel(level);
+      const progressXp = (user.xp || 0) - currentLevelXp;
+      const neededXp = nextLevelXp - currentLevelXp;
+      const progressPercent = (progressXp / neededXp) * 100;
+      const pet = getPetStage(user.streak || 0);
+      const avatar = getAvatar(user.avatar);
+      const themeClass = `gradient-${user.theme || 'default'}`;
+      const today = getTodayString();
+      const availablePoints = (user.totalPoints || 0) - (user.redeemedPoints || 0);
+
+      const todayStats = Object.keys(categoryNames).reduce((acc, cat) => {
+        const tasks = taskDefinitions[currentUser][cat];
+        const completed = tasks.filter(t => user.completedToday?.[`${today}_${cat}_${t.id}`]).length;
+        acc[cat] = { completed, total: tasks.length };
+        acc.totalCompleted = (acc.totalCompleted || 0) + completed;
+        acc.totalTasks = (acc.totalTasks || 0) + tasks.length;
+        return acc;
+      }, {});
+
+      return `
+        <div class="min-h-screen ${themeClass}">
+          <!-- Header -->
+          <div class="bg-black/20 backdrop-blur-sm sticky top-0 z-10">
+            <div class="max-w-lg mx-auto p-4">
+              <div class="flex items-center gap-3">
+                <button onclick="currentUser=null; activeTab='quests'; render();" class="text-white/80 hover:text-white text-2xl">←</button>
+                <div class="text-4xl">${avatar.emoji}</div>
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-white font-bold text-xl">${user.name}</span>
+                    <span class="bg-white/20 text-white px-2 py-0.5 rounded-full text-sm">Lv.${level}</span>
+                  </div>
+                  <div class="mt-1">
+                    <div class="h-2 bg-black/30 rounded-full overflow-hidden">
+                      <div class="h-full bg-gradient-to-r from-yellow-400 to-yellow-200" style="width: ${progressPercent}%"></div>
+                    </div>
+                    <div class="text-white/70 text-xs mt-0.5">${progressXp.toLocaleString()} / ${neededXp.toLocaleString()} XP</div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-2xl">${pet.emoji}</div>
+                  <div class="text-white/80 text-xs">${user.streak || 0}🔥</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="max-w-lg mx-auto px-4 pt-4">
+            <div class="flex bg-black/20 rounded-xl p-1 gap-1">
+              ${[{id:'quests',name:'Quests',icon:'⚔️'},{id:'rewards',name:'Rewards',icon:'🎁'},{id:'profile',name:'Profile',icon:'👤'}].map(tab => `
+                <button onclick="activeTab='${tab.id}'; render();" class="flex-1 py-2 rounded-lg font-medium transition-all ${activeTab === tab.id ? 'bg-white text-gray-800 shadow' : 'text-white/80 hover:text-white'}">
+                  ${tab.icon} ${tab.name}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="max-w-lg mx-auto p-4 pb-20">
+            ${activeTab === 'quests' ? renderQuestsTab(user, today, todayStats) : ''}
+            ${activeTab === 'rewards' ? renderRewardsTab(user, availablePoints, pet) : ''}
+            ${activeTab === 'profile' ? renderProfileTab(user, level) : ''}
+          </div>
+
+          ${showPopup ? renderPopup() : ''}
+        </div>`;
+    }
+
+    function renderQuestsTab(user, today, todayStats) {
+      return `
+        <div class="space-y-6">
+          <div class="bg-white/95 backdrop-blur rounded-2xl p-4 shadow-xl">
+            <h3 class="font-bold text-gray-800 mb-2">Today's Progress</h3>
+            <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-green-400 to-emerald-500" style="width: ${(todayStats.totalCompleted / todayStats.totalTasks) * 100}%"></div>
+            </div>
+            <div class="text-gray-600 text-sm mt-1">${todayStats.totalCompleted} / ${todayStats.totalTasks} tasks complete${todayStats.totalCompleted === todayStats.totalTasks ? ' 🎉' : ''}</div>
+          </div>
+
+          ${Object.entries(categoryNames).map(([catId, catInfo]) => {
+            const tasks = taskDefinitions[currentUser][catId];
+            const stats = todayStats[catId];
+            const hasOverdue = tasks.some(t => !user.completedToday?.[`${today}_${catId}_${t.id}`] && isOverdue(t.deadline));
+            
+            return `
+              <div class="bg-white/95 backdrop-blur rounded-2xl shadow-xl overflow-hidden">
+                <div class="p-4 text-white flex items-center justify-between" style="background: ${catInfo.color}">
+                  <div class="flex items-center gap-2">
+                    <span class="text-2xl">${catInfo.icon}</span>
+                    <span class="font-bold">${catInfo.name}</span>
+                    ${hasOverdue ? '<span class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">OVERDUE</span>' : ''}
+                  </div>
+                  <span class="bg-white/20 px-2 py-1 rounded-full text-sm">${stats.completed}/${stats.total}</span>
+                </div>
+                <div class="p-2">
+                  ${tasks.map(task => {
+                    const todayKey = `${today}_${catId}_${task.id}`;
+                    const isComplete = user.completedToday?.[todayKey];
+                    const isPending = user.pendingApproval?.[todayKey];
+                    const taskOverdue = !isComplete && !isPending && isOverdue(task.deadline);
+                    
+                    return `
+                      <button onclick="toggleTask('${catId}', '${task.id}')" ${isPending ? 'disabled' : ''} class="w-full p-3 rounded-xl flex items-center gap-3 transition-all ${isComplete ? 'bg-green-100' : isPending ? 'bg-yellow-100' : taskOverdue ? 'bg-red-50' : 'hover:bg-gray-100'}">
+                        <div class="w-7 h-7 rounded-full border-2 flex items-center justify-center ${isComplete ? 'bg-green-500 border-green-500 text-white' : isPending ? 'bg-yellow-500 border-yellow-500 text-white' : taskOverdue ? 'border-red-400' : 'border-gray-300'}">
+                          ${isComplete ? '✓' : isPending ? '⏳' : ''}
+                        </div>
+                        <span class="text-2xl">${task.icon}</span>
+                        <span class="flex-1 text-left ${isComplete ? 'text-gray-500 line-through' : taskOverdue ? 'text-red-600' : 'text-gray-800'}">
+                          ${task.name}${isPending ? '<span class="text-yellow-600 text-xs ml-2">Waiting...</span>' : ''}
+                        </span>
+                        <span class="text-sm font-medium ${isComplete ? 'text-green-600' : taskOverdue ? 'text-red-400' : 'text-gray-400'}">+${task.points}</span>
+                      </button>`;
+                  }).join('')}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    function renderRewardsTab(user, availablePoints, pet) {
+      const rewards = settings?.rewards || defaultSettings.rewards;
+      return `
+        <div class="space-y-6">
+          <div class="bg-white/95 backdrop-blur rounded-2xl p-6 shadow-xl text-center">
+            <div class="text-gray-500 mb-1">Available Points</div>
+            <div class="text-5xl font-bold bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">${availablePoints.toLocaleString()}</div>
+            <div class="text-gray-400 text-sm mt-1">${(user.totalPoints || 0).toLocaleString()} earned total</div>
+          </div>
+
+          <div class="bg-white/95 backdrop-blur rounded-2xl shadow-xl overflow-hidden">
+            <div class="p-4 bg-gradient-to-r from-yellow-400 to-orange-400 text-white font-bold">🎁 Redeem Rewards</div>
+            <div class="p-2">
+              ${rewards.filter(r => r.active).map(reward => {
+                const canAfford = availablePoints >= reward.points;
+                return `
+                  <button onclick="${canAfford ? `redeemReward(${JSON.stringify(reward).replace(/"/g, '&quot;')})` : ''}" ${!canAfford ? 'disabled' : ''} class="w-full p-4 rounded-xl flex items-center gap-3 transition-all ${canAfford ? 'hover:bg-yellow-50' : 'opacity-50'}">
+                    <span class="text-3xl">${reward.icon}</span>
+                    <div class="flex-1 text-left">
+                      <div class="font-medium text-gray-800">${reward.name}</div>
+                      <div class="text-sm text-gray-500">${reward.points.toLocaleString()} points</div>
+                    </div>
+                    ${canAfford ? '<span class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium">Redeem</span>' : ''}
+                  </button>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="bg-white/95 backdrop-blur rounded-2xl p-6 shadow-xl text-center">
+            <div class="text-6xl mb-2">${pet.emoji}</div>
+            <div class="text-xl font-bold text-gray-800">${pet.name}</div>
+            <div class="text-gray-500">${user.streak || 0} day streak!</div>
+            <div class="mt-4 text-sm text-gray-400">
+              ${(user.streak || 0) < 60 ? `Next: ${petStages.find(p => p.minStreak > (user.streak || 0))?.name} at ${petStages.find(p => p.minStreak > (user.streak || 0))?.minStreak} days` : '🎉 Maximum evolution reached!'}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderProfileTab(user, level) {
+      return `
+        <div class="space-y-6">
+          <div class="bg-white/95 backdrop-blur rounded-2xl p-6 shadow-xl">
+            <h3 class="font-bold text-gray-800 mb-4">📊 Stats</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-gray-100 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-purple-600">${level}</div>
+                <div class="text-gray-500 text-sm">Level</div>
+              </div>
+              <div class="bg-gray-100 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-orange-500">${user.streak || 0}</div>
+                <div class="text-gray-500 text-sm">Current Streak</div>
+              </div>
+              <div class="bg-gray-100 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-pink-500">${user.longestStreak || 0}</div>
+                <div class="text-gray-500 text-sm">Best Streak</div>
+              </div>
+              <div class="bg-gray-100 rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-green-500">${(user.totalPoints || 0).toLocaleString()}</div>
+                <div class="text-gray-500 text-sm">Total Points</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white/95 backdrop-blur rounded-2xl p-6 shadow-xl">
+            <h3 class="font-bold text-gray-800 mb-4">🎨 Themes</h3>
+            <div class="grid grid-cols-3 gap-3">
+              ${themes.map(theme => {
+                const unlocked = level >= theme.unlockLevel;
+                const selected = (user.theme || 'default') === theme.id;
+                return `
+                  <button onclick="${unlocked ? `changeTheme('${theme.id}')` : ''}" class="relative aspect-square rounded-xl overflow-hidden transition-all gradient-${theme.id} ${selected ? 'ring-4 ring-yellow-400 scale-105' : ''} ${!unlocked ? 'opacity-50' : 'hover:scale-105'}">
+                    ${!unlocked ? `<div class="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs">🔒 Lv.${theme.unlockLevel}</div>` : ''}
+                    ${selected ? '<div class="absolute bottom-1 right-1 text-xl">✓</div>' : ''}
+                  </button>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="bg-white/95 backdrop-blur rounded-2xl p-6 shadow-xl">
+            <h3 class="font-bold text-gray-800 mb-4">😊 Avatars</h3>
+            <div class="grid grid-cols-5 gap-3">
+              ${avatars.map(av => {
+                const unlocked = level >= av.unlockLevel;
+                const selected = (user.avatar || 'star') === av.id;
+                return `
+                  <button onclick="${unlocked ? `changeAvatar('${av.id}')` : ''}" class="aspect-square rounded-xl text-3xl flex items-center justify-center transition-all ${selected ? 'bg-yellow-100 ring-2 ring-yellow-400 scale-110' : 'bg-gray-100'} ${!unlocked ? 'opacity-40' : 'hover:scale-105'}">
+                    ${unlocked ? av.emoji : '🔒'}
+                  </button>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderPopup() {
+      return `
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center animate-bounce-in">
+            ${showPopup.type === 'levelup' ? `
+              <div class="text-6xl mb-4">🎉</div>
+              <h2 class="text-2xl font-bold text-gray-800 mb-2">LEVEL UP!</h2>
+              <p class="text-gray-600 mb-4">You reached Level ${showPopup.level}!</p>
+              <p class="text-purple-600 font-medium">New unlocks may be available!</p>
+            ` : ''}
+            ${showPopup.type === 'redeemed' ? `
+              <div class="text-6xl mb-4">${showPopup.reward.icon}</div>
+              <h2 class="text-2xl font-bold text-gray-800 mb-2">Reward Redeemed!</h2>
+              <p class="text-gray-600">${showPopup.reward.name}</p>
+              <p class="text-sm text-gray-400 mt-2">Show this to Mom or Dad!</p>
+            ` : ''}
+            ${showPopup.type === 'pending' ? `
+              <div class="text-6xl mb-4">⏳</div>
+              <h2 class="text-2xl font-bold text-gray-800 mb-2">Waiting for Approval</h2>
+              <p class="text-gray-600">A parent needs to verify this!</p>
+            ` : ''}
+            <button onclick="showPopup=null; render();" class="mt-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-3 rounded-full font-bold hover:scale-105 transition-all">Awesome!</button>
+          </div>
+        </div>`;
+    }
+
+    // ============== HELPER FUNCTIONS ==============
+    function promptBonusPoints(userId) {
+      const points = prompt(`Award bonus points to ${userData[userId]?.name}:`);
+      if (points && !isNaN(points)) {
+        const reason = prompt('Reason:') || 'Bonus';
+        awardBonusPoints(userId, parseInt(points), reason);
+      }
+    }
+
+    function confirmResetStreak(userId) {
+      if (confirm(`Reset ${userData[userId]?.name}'s streak to 0?`)) {
+        resetStreak(userId);
+      }
+    }
+
+    function updateSetting(key, value) {
+      const newSettings = { ...settings, [key]: value };
+      saveSettings(newSettings);
+      render();
+    }
+
+    function toggleApprovalMode() {
+      const newSettings = { ...settings, requireApproval: !settings.requireApproval };
+      saveSettings(newSettings);
+      render();
+    }
+
+    function changePin(type) {
+      const label = type === 'admin' ? 'Admin' : type === 'ann' ? "Ann's" : "Cat's";
+      const newPin = prompt(`Enter new ${label} PIN (4 digits):`);
+      if (newPin && /^\d{4}$/.test(newPin)) {
+        if (type === 'admin') {
+          saveSettings({ ...settings, adminPin: newPin });
+        } else {
+          saveSettings({ ...settings, kidPins: { ...settings.kidPins, [type]: newPin } });
+        }
+        alert('PIN updated!');
+        render();
+      } else if (newPin) {
+        alert('PIN must be 4 digits');
+      }
+    }
+
+    // ============== INIT ==============
+    document.addEventListener('DOMContentLoaded', () => {
+      initFirebase();
+      render();
+    });
+  </script>
+</body>
+</html>
