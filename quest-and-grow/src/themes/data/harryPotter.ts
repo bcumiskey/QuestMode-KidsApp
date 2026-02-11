@@ -1,0 +1,50 @@
+import type { ThemeDefinition } from '@core/types/index.ts'
+
+export const harryPotterTheme: ThemeDefinition = {
+  id: 'harry-potter',
+  name: 'Harry Potter',
+  icon: '⚡',
+  backgroundClass: 'bg-gradient-to-br from-amber-900 to-red-900',
+  colors: {
+    primary: '#740001',
+    secondary: '#D3A625',
+    accent: '#5D5D5D',
+    backgroundFrom: '#0D0D0D',
+    backgroundTo: '#1C1C2E',
+    surface: '#1C1C2E',
+    surfaceLight: '#2A2A3E',
+    surfaceText: '#F5F5F5',
+    text: '#F5F5F5',
+    textMuted: '#A0A0A0',
+    xpColor: '#D3A625',
+    streakColor: '#E74C3C',
+  },
+  mascot: {
+    name: 'Hedwig',
+    icon: 'owl',
+    greeting: 'Welcome back, wizard!',
+    celebration: 'Brilliant!',
+    encouragement: 'A true witch perseveres.',
+  },
+  vocabulary: {
+    quest: 'Spell',
+    quests: 'Spells',
+    complete: 'Cast',
+    xp: 'Magic Points',
+    greeting: 'Welcome back, wizard!',
+    farewell: 'Mischief managed!',
+    celebration: 'Brilliant spellwork!',
+    categories: {
+      knowledge: 'Magical Studies',
+      body: 'Wizard Wellness',
+      home: 'Common Room Duties',
+      brave: 'Defense Arts',
+      bond: 'House Unity',
+    },
+    resources: {
+      primary: 'Galleons',
+      secondary: 'House Points',
+      rare: 'Phoenix Feathers',
+    },
+  },
+}

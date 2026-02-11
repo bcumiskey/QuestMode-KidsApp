@@ -1,0 +1,50 @@
+import type { ThemeDefinition } from '@core/types/index.ts'
+
+export const disneyPrincessTheme: ThemeDefinition = {
+  id: 'disney-princess',
+  name: 'Disney Princess',
+  icon: '👑',
+  backgroundClass: 'bg-gradient-to-br from-pink-400 to-purple-600',
+  colors: {
+    primary: '#FF69B4',
+    secondary: '#9B59B6',
+    accent: '#F39C12',
+    backgroundFrom: '#1A0A2E',
+    backgroundTo: '#2D1B4E',
+    surface: '#2D1B4E',
+    surfaceLight: '#3D2B5E',
+    surfaceText: '#FFF5F8',
+    text: '#FFF5F8',
+    textMuted: '#D8BFD8',
+    xpColor: '#FF69B4',
+    streakColor: '#F39C12',
+  },
+  mascot: {
+    name: 'Tinker Bell',
+    icon: 'fairy',
+    greeting: 'Hi princess!',
+    celebration: 'So magical!',
+    encouragement: 'You can do it!',
+  },
+  vocabulary: {
+    quest: 'Adventure',
+    quests: 'Adventures',
+    complete: 'Finish',
+    xp: 'Pixie Dust',
+    greeting: 'Welcome, princess!',
+    farewell: 'Sweet dreams!',
+    celebration: 'Wonderful!',
+    categories: {
+      knowledge: 'Royal Education',
+      body: 'Princess Prep',
+      home: 'Castle Keeping',
+      brave: 'Courage Quest',
+      bond: 'Kingdom Harmony',
+    },
+    resources: {
+      primary: 'Pixie Dust',
+      secondary: 'Wishes',
+      rare: 'Enchanted Gems',
+    },
+  },
+}

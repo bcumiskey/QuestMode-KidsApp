@@ -1,0 +1,50 @@
+import type { ThemeDefinition } from '@core/types/index.ts'
+
+export const sonicMarioTheme: ThemeDefinition = {
+  id: 'sonic-mario',
+  name: 'Sonic & Mario',
+  icon: '⚡',
+  backgroundClass: 'bg-gradient-to-br from-blue-600 to-indigo-800',
+  colors: {
+    primary: '#0066FF',
+    secondary: '#FFD700',
+    accent: '#FF4444',
+    backgroundFrom: '#0A0A1A',
+    backgroundTo: '#1A2A4A',
+    surface: '#1A2A4A',
+    surfaceLight: '#2A3A5A',
+    surfaceText: '#FFFFFF',
+    text: '#FFFFFF',
+    textMuted: '#88AAFF',
+    xpColor: '#FFD700',
+    streakColor: '#FF4444',
+  },
+  mascot: {
+    name: 'Tails',
+    icon: 'fox',
+    greeting: 'Hey! Wanna team up?',
+    celebration: 'NICE ONE!',
+    encouragement: 'Gotta go fast!',
+  },
+  vocabulary: {
+    quest: 'Level',
+    quests: 'Levels',
+    complete: 'Clear',
+    xp: 'Rings',
+    greeting: 'Ready to go fast!',
+    farewell: 'See you next level!',
+    celebration: 'Level cleared!',
+    categories: {
+      knowledge: 'Data Collection',
+      body: 'Power-Up Station',
+      home: 'Zone Maintenance',
+      brave: 'Boss Challenge',
+      bond: 'Co-op Mode',
+    },
+    resources: {
+      primary: 'Rings',
+      secondary: 'Power Stars',
+      rare: 'Chaos Emeralds',
+    },
+  },
+}

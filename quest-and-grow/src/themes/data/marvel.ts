@@ -1,0 +1,50 @@
+import type { ThemeDefinition } from '@core/types/index.ts'
+
+export const marvelTheme: ThemeDefinition = {
+  id: 'marvel',
+  name: 'Marvel',
+  icon: '🦸',
+  backgroundClass: 'bg-gradient-to-br from-red-900 to-blue-900',
+  colors: {
+    primary: '#E23636',
+    secondary: '#518CCA',
+    accent: '#F0B429',
+    backgroundFrom: '#0D1117',
+    backgroundTo: '#161B22',
+    surface: '#161B22',
+    surfaceLight: '#21262D',
+    surfaceText: '#F0F6FC',
+    text: '#F0F6FC',
+    textMuted: '#8B949E',
+    xpColor: '#F0B429',
+    streakColor: '#E23636',
+  },
+  mascot: {
+    name: 'Baby Groot',
+    icon: 'tree',
+    greeting: 'I am Groot!',
+    celebration: 'I AM GROOT!',
+    encouragement: 'I am Groot.',
+  },
+  vocabulary: {
+    quest: 'Hero Mission',
+    quests: 'Hero Missions',
+    complete: 'Complete',
+    xp: 'Hero Stars',
+    greeting: 'Heroes assemble!',
+    farewell: 'Avengers dismissed!',
+    celebration: 'SUPER HERO!',
+    categories: {
+      knowledge: 'Intel Briefing',
+      body: 'Hero Training',
+      home: 'Base Operations',
+      brave: 'Combat Mission',
+      bond: 'Team Assembly',
+    },
+    resources: {
+      primary: 'Power Crystals',
+      secondary: 'Hero Badges',
+      rare: 'Infinity Stones',
+    },
+  },
+}

@@ -1,0 +1,50 @@
+import type { ThemeDefinition } from '@core/types/index.ts'
+
+export const jurassicParkTheme: ThemeDefinition = {
+  id: 'jurassic-park',
+  name: 'Jurassic Park',
+  icon: '🦕',
+  backgroundClass: 'bg-gradient-to-br from-green-800 to-emerald-900',
+  colors: {
+    primary: '#FF6B35',
+    secondary: '#2D6A4F',
+    accent: '#95D5B2',
+    backgroundFrom: '#081C15',
+    backgroundTo: '#1B4332',
+    surface: '#1B4332',
+    surfaceLight: '#2D6A4F',
+    surfaceText: '#F5F5F5',
+    text: '#F5F5F5',
+    textMuted: '#95D5B2',
+    xpColor: '#FFD166',
+    streakColor: '#FF6B35',
+  },
+  mascot: {
+    name: 'Blue',
+    icon: 'dinosaur',
+    greeting: 'Hey expedition leader!',
+    celebration: 'AMAZING!',
+    encouragement: 'Keep going, explorer!',
+  },
+  vocabulary: {
+    quest: 'Mission',
+    quests: 'Missions',
+    complete: 'Complete',
+    xp: 'DNA Points',
+    greeting: 'Welcome back, explorer!',
+    farewell: 'Stay alert out there!',
+    celebration: 'Outstanding field work!',
+    categories: {
+      knowledge: 'Field Research',
+      body: 'Expedition Ready',
+      home: 'Base Camp Ops',
+      brave: 'Danger Territory',
+      bond: 'Team Expedition',
+    },
+    resources: {
+      primary: 'DNA Samples',
+      secondary: 'Research Notes',
+      rare: 'Amber Fragments',
+    },
+  },
+}
