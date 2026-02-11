@@ -14,5 +14,5 @@ export const themes: Record<ThemeId, ThemeDefinition> = {
 }
 
 export function getTheme(id: ThemeId): ThemeDefinition {
-  return themes[id]
+  return themes[id] ?? themes['harry-potter']
 }

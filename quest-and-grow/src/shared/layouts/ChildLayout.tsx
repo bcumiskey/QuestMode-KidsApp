@@ -53,7 +53,7 @@ export function ChildLayout() {
     }
   }, [member.lastLoginDate, today])
 
-  const handleClaimLoginReward = async (day: number) => {
+  const handleClaimLoginReward = async (day: number, _currency: number) => {
     const newStreak = member.lastLoginDate === new Date(Date.now() - 86400000).toISOString().slice(0, 10)
       ? (member.loginStreak ?? 0) + 1
       : 1
@@ -159,12 +159,11 @@ export function ChildLayout() {
         </div>
 
         {/* Daily Login Reward */}
-        {showLoginReward && (
+        {showLoginReward && themeData && (
           <DailyLoginReward
             currentDay={(member.loginStreak ?? 0) % 7 + 1}
             tier={tier}
-            themeColors={themeData.colors}
-            mascot={themeData.mascot}
+            theme={themeData}
             onClaim={handleClaimLoginReward}
             onClose={() => setShowLoginReward(false)}
           />

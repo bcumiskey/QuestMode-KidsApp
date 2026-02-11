@@ -11,7 +11,7 @@ import {
 import { db } from './app.ts'
 
 export function dbRef(path: string): DatabaseReference {
-  return ref(db, path)
+  return path ? ref(db, path) : ref(db)
 }
 
 export async function dbGet<T>(path: string): Promise<T | null> {
